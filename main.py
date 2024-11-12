@@ -1,139 +1,90 @@
-import torch
-import torch.nn as nn
-import torchvision.models as models
-import torchvision.transforms as transforms
-from torchvision.datasets import ImageFolder
-from torch.utils.data import DataLoader
-import torch.optim as optim
 import os
-from tqdm import tqdm
-import random
-import numpy as np
-from sklearn.metrics import confusion_matrix, classification_report
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import f1_score
+import torch
+import torchvision.transforms as transforms
+import torchvision.datasets as datasets
+import torchvision.models as models
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
-from PIL import Image
-import pandas as pd
+writer = SummaryWriter()
+# Параметры
+data_dir = 'train_classes'  # Укажите путь к вашему датасету
+batch_size = 32
+num_classes = 10
+num_epochs = 10
+learning_rate = 0.001
+torch.device('cuda')
+# Аугментация и нормализация изображений
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.RandomHorizontalFlip(),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  # Изменение яркости и контрастности
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
 
-seed = 42
-torch.manual_seed(seed)
-torch.cuda.manual_seed(seed)
-torch.cuda.manual_seed_all(seed)
-np.random.seed(seed)
+# Загрузка данных
+train_dataset = datasets.ImageFolder(data_dir, transform)
 
-random.seed(seed)
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
 
+from sklearn.model_selection import train_test_split
+
+train_indices, val_indices = train_test_split(range(len(train_dataset)), test_size=0.2, random_state=42)
+train_sampler = torch.utils.data.SubsetRandomSampler(train_indices)
+val_sampler = torch.utils.data.SubsetRandomSampler(val_indices)
+
+train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler)
+val_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=val_sampler)
+
+
+#train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+
+# Использование предобученной модели ResNet
+class CustomResNet(nn.Module):
+    def __init__(self):
+        super(CustomResNet, self).__init__()
+        self.model = models.resnet18(pretrained=True)
+        self.model.fc = nn.Sequential(
+            nn.Dropout(0.5),  # Добавленный слой Dropout
+            nn.Linear(self.model.fc.in_features, num_classes)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+model = CustomResNet()
+
+#model = models.resnet34(pretrained=True)
+
+
+
+
+
+#model.fc = nn.Linear(model.fc.in_features, num_classes)  # Изменяем последний слой
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(device)
-model = models.resnet18()
-
-# Заменим последний слой (fully connected) так, чтобы количество выходных каналов соответствовало 3 классам
-num_classes = 10
-model.fc = nn.Linear(model.fc.in_features, num_classes)
-
-train_data_dir = 'train2'
-val_data_dir = 'test22'
-
-# Определим трансформации
-train_transforms = transforms.Compose([
-    transforms.Resize((224,224)),
-    transforms.ToTensor(),
-])
-
-val_transforms = transforms.Compose([
-    transforms.Resize((224,224)),
-    transforms.ToTensor(),
-])
-
-# Создадим датасеты
-train_dataset = ImageFolder(train_data_dir, transform=train_transforms)
-val_dataset = ImageFolder(val_data_dir, transform=val_transforms)
-
-# Создадим датагенераторы
-batch_size = 64
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
-classes_list = train_dataset.classes
-data_count = [915, 1964, 930, 747, 2394, 11019, 4282, 1882, 1766, 720]
-data_weight = [d/len(data_count) for d in data_count]
-data_weight_tensor = torch.FloatTensor(data_weight).cuda(device=device)
-# Определим функцию потерь и оптимизатор
-criterion = nn.CrossEntropyLoss()#weight=data_weight_tensor)
-optimizer = optim.Adam(model.parameters(), lr=0.0005)
-
-# число эпох
-num_epochs = 25
-
-train_losses = []
-train_accuracies = []
-val_losses = []
-val_accuracies = []
-best_val_accuracy = 0
 model.to(device)
+# Оптимизатор и функция потерь
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+criterion = nn.CrossEntropyLoss()
 
+# Обучение модели
+model.train()
+min_loss = 1
 for epoch in range(num_epochs):
-    model.train()
-    running_loss = 0.0
-    correct = 0
-    total = 0
-    for images, labels in tqdm(train_loader):
-        images, labels = images.to(device), labels.to(device)
+    for images, labels in train_loader:
         optimizer.zero_grad()
-        outputs = model(images)
-        loss = criterion(outputs, labels)
+        outputs = model(images.to(device))
+        loss = criterion(outputs, labels.to(device))
         loss.backward()
         optimizer.step()
-
-        running_loss += loss.item()
-        _, predicted = outputs.max(1)
-        total += labels.size(0)
-        correct += predicted.eq(labels).sum().item()
-
-    train_loss = running_loss / len(train_loader)
-    train_accuracy = correct / total
-    train_losses.append(train_loss)
-    train_accuracies.append(train_accuracy)
-
-    # Валидация модели
-    model.eval()
-    val_loss = 0.0
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for images, labels in tqdm(val_loader):
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-
-            val_loss += loss.item()
-            _, predicted = outputs.max(1)
-            total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
-
-    val_loss /= len(val_loader)
-    val_accuracy = correct / total
-    val_losses.append(val_loss)
-    val_accuracies.append(val_accuracy)
-
-    print(f'Epoch [{epoch + 1}/{num_epochs}], '
-          f'Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}, '
-          f'Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f}')
-
-    # Сохранение лучшей модели на основе валидационной точности
-    if val_accuracy > best_val_accuracy:
-        best_val_accuracy = val_accuracy
-        torch.save(model.state_dict(), 'best_model.pth')
-        print('Saved best model!')
-
-    # Сохранение последней актуальной модели
-    torch.save(model.state_dict(), 'last_model.pth')
-    print()
-
-print('Training and validation complete!')
-
-print('sucsses')
+    if loss.item() < min_loss:
+        min_loss = loss.item()
+        torch.save(model.state_dict(), 'best_ animal_classifier.pth')
+    writer.add_scalar(f'Loss/train', loss.item(), epoch)
+    print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
+writer.close()
+# Сохранение модели
+torch.save(model.state_dict(), 'animal_classifier.pth')
