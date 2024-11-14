@@ -12,7 +12,7 @@ writer = SummaryWriter()
 # Параметры
 data_dir = 'train_classes'  # Укажите путь к вашему датасету
 batch_size = 32
-num_classes = 10
+num_classes = 2
 num_epochs = 10
 learning_rate = 0.001
 torch.device('cuda')
@@ -58,14 +58,11 @@ model = CustomResNet()
 
 #model = models.resnet34(pretrained=True)
 
-
-
-
-
 #model.fc = nn.Linear(model.fc.in_features, num_classes)  # Изменяем последний слой
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(device)
 model.to(device)
+
 # Оптимизатор и функция потерь
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 criterion = nn.CrossEntropyLoss()
@@ -73,6 +70,7 @@ criterion = nn.CrossEntropyLoss()
 # Обучение модели
 model.train()
 min_loss = 1
+
 for epoch in range(num_epochs):
     for images, labels in train_loader:
         optimizer.zero_grad()
@@ -82,9 +80,10 @@ for epoch in range(num_epochs):
         optimizer.step()
     if loss.item() < min_loss:
         min_loss = loss.item()
-        torch.save(model.state_dict(), 'best_ animal_classifier.pth')
+        torch.save(model.state_dict(), 'best_drowsy_classifier.pth')
     writer.add_scalar(f'Loss/train', loss.item(), epoch)
     print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
 writer.close()
+
 # Сохранение модели
-torch.save(model.state_dict(), 'animal_classifier.pth')
+torch.save(model.state_dict(), 'Drowsy_classifier.pth')
