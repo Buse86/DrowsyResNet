@@ -7,11 +7,11 @@ from PIL import Image
 import torchvision.transforms as transforms
 import torch.nn as nn
 import torchvision.models as models
+import os
 
 cap = cv2.VideoCapture(0)
 
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 250)
-
 
 class CustomResNet(nn.Module):
     def __init__(self):
@@ -66,7 +66,8 @@ while True:
             top_class = top_class.item()
             verd = top_class
             print(top_class)
-            
+        os.remove("LastFrame.jpg")
+
     verd_mess = ''
     if verd == 1:
         verd_mess = 'Drowsy'
@@ -87,5 +88,3 @@ while True:
 
 cv2.destroyAllWindows()
 cap.release()
-keyboard.wait('+')
-
