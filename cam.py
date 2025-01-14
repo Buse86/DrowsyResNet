@@ -66,8 +66,14 @@ while True:
             top_class = top_class.item()
             verd = top_class
             print(top_class)
+            
+    verd_mess = ''
+    if verd == 1:
+        verd_mess = 'Drowsy'
+    else:
+        verd_mess = 'NonDrowsy'
 
-    cv2.putText(image_orig, f'status: {verd}', (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    cv2.putText(image_orig, f'status: {verd_mess}', (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
     cv2.imshow("output", image)
 
